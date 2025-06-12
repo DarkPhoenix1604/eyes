@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Virtual Pet</title>
+    <title>Virtual Pet Eyes</title>
     <style>
       * {
         background: #000;
@@ -18,6 +18,7 @@
       canvas {
         border-radius: 12px;
         background-color: #000;
+        transition: width 0.6s ease, height 0.6s ease;
       }
     </style>
   </head>
@@ -28,179 +29,70 @@
       const canvas = document.getElementById("eyeCanvas");
       const ctx = canvas.getContext("2d");
 
-      const DISPLAY_WIDTH = 240;
-      const DISPLAY_HEIGHT = 135;
-      const BASE_EYE_WIDTH = 30;
-      const BASE_EYE_HEIGHT = 50;
-      const EYE_SPACING = 80;
-      const FRAME_DELAY = 50;
-      const BLINK_FRAMES = 20;
-      const OPEN_TIME_MIN = 1000;
-      const OPEN_TIME_MAX = 4000;
+      let isFullscreen = false;
+      let isExpanding = false;
+      let expandProgress = 0;
+      let autoShrinkTimeout = null;
 
-      const eyeY = DISPLAY_HEIGHT / 2;
-      const eyePositions = [
-        (DISPLAY_WIDTH - EYE_SPACING) / 2,
-        (DISPLAY_WIDTH + EYE_SPACING) / 2,
-      ];
+      const originalSize = { width: 240, height: 135 };
+      const fullscreenSize = {
+        width: window.innerWidth*2,
+        height: window.innerWidth, // Wider aspect ratio (3:1)
+      };
 
-      let blinkState = 0;
-      let isBlinking = false;
-      let lastBlinkTime = performance.now();
-      let openTime = getRandomOpenTime();
+      let BASE_EYE_WIDTH, BASE_EYE_HEIGHT, EYE_SPACING, eyeY, eyePositions;
 
-      let mouseX = DISPLAY_WIDTH / 2;
-      let mouseY = DISPLAY_HEIGHT / 2;
+      function updateGeometry() {
+        BASE_EYE_WIDTH = canvas.width * 0.125;
+        BASE_EYE_HEIGHT = canvas.height * 0.37;
+        EYE_SPACING = canvas.width * 0.35;
+        eyeY = canvas.height / 2;
 
+        eyePositions = [
+          canvas.width / 2 - EYE_SPACING / 2,
+          canvas.width / 2 + EYE_SPACING / 2,
+        ];
+      }
+
+      function setCanvasSize(width, height) {
+        canvas.style.width = width + "px";
+        canvas.style.height = height + "px";
+        canvas.width = width;
+        canvas.height = height;
+        updateGeometry();
+      }
+
+      let mouseX = originalSize.width / 2,
+        mouseY = originalSize.height / 2;
       window.addEventListener("mousemove", (e) => {
         const rect = canvas.getBoundingClientRect();
         mouseX = e.clientX - rect.left;
         mouseY = e.clientY - rect.top;
+      });
 
-        // Clamp mouse to canvas bounds to avoid weird jumps
-        mouseX = Math.max(0, Math.min(mouseX, canvas.width));
-        mouseY = Math.max(0, Math.min(mouseY, canvas.height));
+      canvas.addEventListener("dblclick", () => {
+        if (isExpanding) return;
+
+        isFullscreen = !isFullscreen;
+        isExpanding = true;
+        expandProgress = 0;
+
+        if (isFullscreen) {
+          clearTimeout(autoShrinkTimeout);
+          autoShrinkTimeout = setTimeout(() => {
+            isFullscreen = false;
+            isExpanding = true;
+            expandProgress = 0;
+          }, 3000); // shrink after 3 seconds
+        }
       });
 
       const petState = {
-        mood: "neutral", // happy, sleepy, surprised, asleep
+        mood: "neutral",
         energy: 100,
         lastInteraction: performance.now(),
       };
 
-      function getRandomOpenTime() {
-        return Math.floor(
-          Math.random() * (OPEN_TIME_MAX - OPEN_TIME_MIN) + OPEN_TIME_MIN
-        );
-      }
-
-      function clearCanvas() {
-        ctx.fillStyle = "black";
-        ctx.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-      }
-      function drawPupil(x, y, eyeRx, eyeRy) {
-        const pupilWidth = eyeRx / 1.5;
-        const pupilHeight = eyeRy / 1.75;
-        const borderRadius = 4;
-
-        // Max offset the pupil can move from center
-        const maxOffsetX = eyeRx * 0.3;
-        const maxOffsetY = eyeRy * 0.3;
-
-        // Calculate direction vector toward mouse
-        const dx = mouseX - x;
-        const dy = mouseY - y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-
-        // Normalize and scale within offset range
-        const offsetX = (dx / dist) * maxOffsetX;
-        const offsetY = (dy / dist) * maxOffsetY;
-
-        const pupilX = x + offsetX - pupilWidth / 2;
-        const pupilY = y + offsetY - pupilHeight / 2;
-
-        ctx.beginPath();
-        if (ctx.roundRect) {
-          ctx.roundRect(pupilX, pupilY, pupilWidth, pupilHeight, borderRadius);
-        } else {
-          ctx.rect(pupilX, pupilY, pupilWidth, pupilHeight);
-        }
-
-        ctx.fillStyle = "black";
-        ctx.fill();
-      }
-
-      function drawEye(x, y, rx, ry, mood = "neutral") {
-        if (mood === "asleep") {
-          ctx.beginPath();
-          ctx.moveTo(x - rx, y);
-          ctx.quadraticCurveTo(x, y + 5, x + rx, y);
-          ctx.strokeStyle = "white";
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          return;
-        }
-
-        const width = rx * 2;
-        const height = ry * 2;
-        const cornerRadius = Math.min(rx, ry) * 0.4; // Adjust roundness here
-
-        ctx.beginPath();
-        ctx.roundRect(x - rx, y - ry, width, height, cornerRadius);
-        ctx.fillStyle = "white";
-        ctx.fill();
-
-        drawPupil(x, y, rx, ry);
-      }
-
-      function updateEnergy() {
-        const now = performance.now();
-        if (now - petState.lastInteraction > 3000) {
-          petState.energy = Math.max(0, petState.energy - 0.05);
-          if (petState.energy <= 20) petState.mood = "sleepy";
-          if (petState.energy === 0) petState.mood = "asleep";
-        }
-      }
-
-      function animateBlink() {
-        const now = performance.now();
-        updateEnergy();
-        clearCanvas();
-
-        if (
-          !isBlinking &&
-          now - lastBlinkTime >= openTime &&
-          petState.mood !== "asleep"
-        ) {
-          isBlinking = true;
-          blinkState = 0;
-        }
-
-        if (petState.mood === "asleep") {
-          eyePositions.forEach((x) =>
-            drawEye(x, eyeY, BASE_EYE_WIDTH, 2, "asleep")
-          );
-        } else if (isBlinking) {
-          let blinkProgress;
-
-          if (blinkState < BLINK_FRAMES / 2) {
-            blinkProgress = blinkState / (BLINK_FRAMES / 2);
-            blinkProgress = 1.0 - blinkProgress * blinkProgress; // closing
-          } else {
-            blinkProgress =
-              (blinkState - BLINK_FRAMES / 2) / (BLINK_FRAMES / 2);
-            blinkProgress = blinkProgress * (2 - blinkProgress); // opening
-          }
-
-          const currentHeight = Math.max(1, BASE_EYE_HEIGHT * blinkProgress);
-          const currentWidth = Math.max(
-            5,
-            BASE_EYE_WIDTH * (0.8 + 0.2 * blinkProgress)
-          );
-
-          eyePositions.forEach((x) =>
-            drawEye(x, eyeY, currentWidth, currentHeight, petState.mood)
-          );
-          blinkState++;
-
-          if (blinkState >= BLINK_FRAMES) {
-            isBlinking = false;
-            lastBlinkTime = now;
-            openTime = getRandomOpenTime();
-            if (Math.random() < 0.1) {
-              openTime = 300; // quick double blink
-            }
-          }
-        } else {
-          eyePositions.forEach((x) =>
-            drawEye(x, eyeY, BASE_EYE_WIDTH, BASE_EYE_HEIGHT, petState.mood)
-          );
-        }
-
-        requestAnimationFrame(animateBlink);
-      }
-
-      // Interactivity
       canvas.addEventListener("mouseenter", () => {
         if (petState.mood !== "asleep") {
           petState.mood = "happy";
@@ -229,7 +121,111 @@
         }, 500);
       });
 
-      animateBlink();
+      function clearCanvas() {
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      function drawPupil(x, y, eyeRx, eyeRy) {
+        const pupilWidth = eyeRx / 1.5;
+        const pupilHeight = eyeRy / 1.5;
+        const borderRadius = Math.min(pupilWidth, pupilHeight) * 0.25;
+
+        const maxOffsetX = eyeRx * 0.3;
+        const maxOffsetY = eyeRy * 0.3;
+
+        const dx = mouseX - x;
+        const dy = mouseY - y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        const offsetX = (dx / dist) * maxOffsetX;
+        const offsetY = (dy / dist) * maxOffsetY;
+
+        const pupilX = x + offsetX - pupilWidth / 2;
+        const pupilY = y + offsetY - pupilHeight / 2;
+
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(pupilX, pupilY, pupilWidth, pupilHeight, borderRadius);
+        } else {
+          ctx.rect(pupilX, pupilY, pupilWidth, pupilHeight);
+        }
+        ctx.fillStyle = "black";
+        ctx.fill();
+      }
+
+      function drawEye(x, y, rx, ry, mood = "neutral") {
+        if (mood === "asleep") {
+          ctx.beginPath();
+          ctx.moveTo(x - rx, y);
+          ctx.quadraticCurveTo(x, y + 6, x + rx, y);
+          ctx.strokeStyle = "white";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          return;
+        }
+
+        const width = rx * 2;
+        const height = ry * 2;
+        const cornerRadius = Math.min(rx, ry) * 0.4;
+
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(
+            x - width / 2,
+            y - height / 2,
+            width,
+            height,
+            cornerRadius
+          );
+        } else {
+          ctx.rect(x - width / 2, y - height / 2, width, height);
+        }
+        ctx.fillStyle = "white";
+        ctx.fill();
+
+        drawPupil(x, y, rx, ry);
+      }
+
+      function updateEnergy() {
+        const now = performance.now();
+        if (now - petState.lastInteraction > 5000) {
+          petState.energy = Math.max(0, petState.energy - 0.05);
+          if (petState.energy <= 20 && petState.energy > 0)
+            petState.mood = "sleepy";
+          if (petState.energy === 0) petState.mood = "asleep";
+        }
+      }
+
+      function animate() {
+        updateEnergy();
+
+        if (isExpanding) {
+          expandProgress += 0.05;
+          if (expandProgress >= 1) {
+            expandProgress = 1;
+            isExpanding = false;
+          }
+
+          const target = isFullscreen ? fullscreenSize : originalSize;
+          const start = isFullscreen ? originalSize : fullscreenSize;
+          const width =
+            start.width + (target.width - start.width) * expandProgress;
+          const height =
+            start.height + (target.height - start.height) * expandProgress;
+          setCanvasSize(width, height);
+        }
+
+        clearCanvas();
+        eyePositions.forEach((x) =>
+          drawEye(x, eyeY, BASE_EYE_WIDTH, BASE_EYE_HEIGHT, petState.mood)
+        );
+
+        requestAnimationFrame(animate);
+      }
+
+      setCanvasSize(originalSize.width, originalSize.height);
+      animate();
     </script>
   </body>
 </html>
