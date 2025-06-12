@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Virtual Pet Eyes Only</title>
+    <title>Virtual Pet</title>
     <style>
       * {
         background: #000;
@@ -49,6 +49,19 @@
       let lastBlinkTime = performance.now();
       let openTime = getRandomOpenTime();
 
+      let mouseX = DISPLAY_WIDTH / 2;
+      let mouseY = DISPLAY_HEIGHT / 2;
+
+      window.addEventListener("mousemove", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = e.clientX - rect.left;
+        mouseY = e.clientY - rect.top;
+
+        // Clamp mouse to canvas bounds to avoid weird jumps
+        mouseX = Math.max(0, Math.min(mouseX, canvas.width));
+        mouseY = Math.max(0, Math.min(mouseY, canvas.height));
+      });
+
       const petState = {
         mood: "neutral", // happy, sleepy, surprised, asleep
         energy: 100,
@@ -65,6 +78,37 @@
         ctx.fillStyle = "black";
         ctx.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
       }
+      function drawPupil(x, y, eyeRx, eyeRy) {
+        const pupilWidth = eyeRx / 1.5;
+        const pupilHeight = eyeRy / 1.75;
+        const borderRadius = 4;
+
+        // Max offset the pupil can move from center
+        const maxOffsetX = eyeRx * 0.3;
+        const maxOffsetY = eyeRy * 0.3;
+
+        // Calculate direction vector toward mouse
+        const dx = mouseX - x;
+        const dy = mouseY - y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        // Normalize and scale within offset range
+        const offsetX = (dx / dist) * maxOffsetX;
+        const offsetY = (dy / dist) * maxOffsetY;
+
+        const pupilX = x + offsetX - pupilWidth / 2;
+        const pupilY = y + offsetY - pupilHeight / 2;
+
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(pupilX, pupilY, pupilWidth, pupilHeight, borderRadius);
+        } else {
+          ctx.rect(pupilX, pupilY, pupilWidth, pupilHeight);
+        }
+
+        ctx.fillStyle = "black";
+        ctx.fill();
+      }
 
       function drawEye(x, y, rx, ry, mood = "neutral") {
         if (mood === "asleep") {
@@ -77,10 +121,16 @@
           return;
         }
 
+        const width = rx * 2;
+        const height = ry * 2;
+        const cornerRadius = Math.min(rx, ry) * 0.4; // Adjust roundness here
+
         ctx.beginPath();
-        ctx.ellipse(x, y, rx, ry, 0, 0, 2 * Math.PI);
+        ctx.roundRect(x - rx, y - ry, width, height, cornerRadius);
         ctx.fillStyle = "white";
         ctx.fill();
+
+        drawPupil(x, y, rx, ry);
       }
 
       function updateEnergy() {
@@ -147,7 +197,7 @@
           );
         }
 
-        setTimeout(animateBlink, FRAME_DELAY);
+        requestAnimationFrame(animateBlink);
       }
 
       // Interactivity
