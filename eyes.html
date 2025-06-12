@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Virtual Pet Eyes Only</title>
+    <style>
+      * {
+        background: #000;
+      }
+      body {
+        margin: 0;
+        background: #000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+      canvas {
+        border-radius: 12px;
+        background-color: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="eyeCanvas" width="240" height="135"></canvas>
+
+    <script>
+      const canvas = document.getElementById("eyeCanvas");
+      const ctx = canvas.getContext("2d");
+
+      const DISPLAY_WIDTH = 240;
+      const DISPLAY_HEIGHT = 135;
+      const BASE_EYE_WIDTH = 30;
+      const BASE_EYE_HEIGHT = 50;
+      const EYE_SPACING = 80;
+      const FRAME_DELAY = 50;
+      const BLINK_FRAMES = 20;
+      const OPEN_TIME_MIN = 1000;
+      const OPEN_TIME_MAX = 4000;
+
+      const eyeY = DISPLAY_HEIGHT / 2;
+      const eyePositions = [
+        (DISPLAY_WIDTH - EYE_SPACING) / 2,
+        (DISPLAY_WIDTH + EYE_SPACING) / 2,
+      ];
+
+      let blinkState = 0;
+      let isBlinking = false;
+      let lastBlinkTime = performance.now();
+      let openTime = getRandomOpenTime();
+
+      const petState = {
+        mood: "neutral", // happy, sleepy, surprised, asleep
+        energy: 100,
+        lastInteraction: performance.now(),
+      };
+
+      function getRandomOpenTime() {
+        return Math.floor(
+          Math.random() * (OPEN_TIME_MAX - OPEN_TIME_MIN) + OPEN_TIME_MIN
+        );
+      }
+
+      function clearCanvas() {
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+      }
+
+      function drawEye(x, y, rx, ry, mood = "neutral") {
+        if (mood === "asleep") {
+          ctx.beginPath();
+          ctx.moveTo(x - rx, y);
+          ctx.quadraticCurveTo(x, y + 5, x + rx, y);
+          ctx.strokeStyle = "white";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          return;
+        }
+
+        ctx.beginPath();
+        ctx.ellipse(x, y, rx, ry, 0, 0, 2 * Math.PI);
+        ctx.fillStyle = "white";
+        ctx.fill();
+      }
+
+      function updateEnergy() {
+        const now = performance.now();
+        if (now - petState.lastInteraction > 3000) {
+          petState.energy = Math.max(0, petState.energy - 0.05);
+          if (petState.energy <= 20) petState.mood = "sleepy";
+          if (petState.energy === 0) petState.mood = "asleep";
+        }
+      }
+
+      function animateBlink() {
+        const now = performance.now();
+        updateEnergy();
+        clearCanvas();
+
+        if (
+          !isBlinking &&
+          now - lastBlinkTime >= openTime &&
+          petState.mood !== "asleep"
+        ) {
+          isBlinking = true;
+          blinkState = 0;
+        }
+
+        if (petState.mood === "asleep") {
+          eyePositions.forEach((x) =>
+            drawEye(x, eyeY, BASE_EYE_WIDTH, 2, "asleep")
+          );
+        } else if (isBlinking) {
+          let blinkProgress;
+
+          if (blinkState < BLINK_FRAMES / 2) {
+            blinkProgress = blinkState / (BLINK_FRAMES / 2);
+            blinkProgress = 1.0 - blinkProgress * blinkProgress; // closing
+          } else {
+            blinkProgress =
+              (blinkState - BLINK_FRAMES / 2) / (BLINK_FRAMES / 2);
+            blinkProgress = blinkProgress * (2 - blinkProgress); // opening
+          }
+
+          const currentHeight = Math.max(1, BASE_EYE_HEIGHT * blinkProgress);
+          const currentWidth = Math.max(
+            5,
+            BASE_EYE_WIDTH * (0.8 + 0.2 * blinkProgress)
+          );
+
+          eyePositions.forEach((x) =>
+            drawEye(x, eyeY, currentWidth, currentHeight, petState.mood)
+          );
+          blinkState++;
+
+          if (blinkState >= BLINK_FRAMES) {
+            isBlinking = false;
+            lastBlinkTime = now;
+            openTime = getRandomOpenTime();
+            if (Math.random() < 0.1) {
+              openTime = 300; // quick double blink
+            }
+          }
+        } else {
+          eyePositions.forEach((x) =>
+            drawEye(x, eyeY, BASE_EYE_WIDTH, BASE_EYE_HEIGHT, petState.mood)
+          );
+        }
+
+        setTimeout(animateBlink, FRAME_DELAY);
+      }
+
+      // Interactivity
+      canvas.addEventListener("mouseenter", () => {
+        if (petState.mood !== "asleep") {
+          petState.mood = "happy";
+          petState.lastInteraction = performance.now();
+        }
+      });
+
+      canvas.addEventListener("mouseleave", () => {
+        if (petState.energy > 20) petState.mood = "neutral";
+      });
+
+      canvas.addEventListener("click", () => {
+        if (petState.mood === "asleep") {
+          petState.energy = 30;
+          petState.mood = "surprised";
+          petState.lastInteraction = performance.now();
+          return;
+        }
+
+        petState.energy = Math.min(100, petState.energy + 10);
+        petState.mood = "surprised";
+        petState.lastInteraction = performance.now();
+
+        setTimeout(() => {
+          petState.mood = petState.energy <= 20 ? "sleepy" : "happy";
+        }, 500);
+      });
+
+      animateBlink();
+    </script>
+  </body>
+</html>
